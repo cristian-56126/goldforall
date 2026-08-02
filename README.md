@@ -188,6 +188,13 @@ Toda petición que modifique datos usando cookies debe llevar la cabecera
 `X-CSRF-Token` con el valor de la cookie `gfa_csrf`. Los clientes que no son
 navegador pueden usar `Authorization: Bearer <access token>` y saltarse el CSRF.
 
+## Despliegue
+
+Ver **[DEPLOY.md](DEPLOY.md)**. Resumen: SPA en Vercel, API en Render (proceso
+vivo, no serverless) y Postgres en Neon, con un rewrite de Vercel que reenvía
+`/api/*` a la API para que el navegador vea un solo origen y las cookies de
+sesión sigan en `SameSite=Lax`.
+
 ## Migraciones
 
 Están versionadas en `server/src/migrate.js` y registradas en la tabla
