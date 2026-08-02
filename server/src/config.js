@@ -41,9 +41,17 @@ const esquema = z
     PORT: z.coerce.number().int().positive().default(4310),
 
     // Origen público del frontend: enlaces de correo y redirección OAuth.
-    APP_URL: z.string().url().default('http://localhost:5310'),
+    // El esquema es obligatorio: "midominio.com" a secas no es una URL válida
+    // y es el error más fácil de cometer al copiarla del dashboard.
+    APP_URL: z
+      .string()
+      .url('Debe ser una URL completa CON esquema, por ejemplo https://goldforall-client.vercel.app (no sirve goldforall-client.vercel.app a secas)')
+      .default('http://localhost:5310'),
     // Origen público de esta API: se usa para construir el redirect_uri de Google.
-    API_URL: z.string().url().default('http://localhost:4310'),
+    API_URL: z
+      .string()
+      .url('Debe ser una URL completa CON esquema. Con el rewrite de Vercel es el MISMO valor que APP_URL')
+      .default('http://localhost:4310'),
 
     JWT_SECRET: z
       .string()
@@ -195,8 +203,24 @@ if (!resultado.success) {
     .join('\n');
   console.error(
     `\nConfiguración inválida — el servidor no puede arrancar.\n` +
-      `Corrige esto en ${DONDE_CONFIGURAR}:\n${detalles}\n\n` +
-      'Referencia de todas las variables: server/.env.example\n' +
+      `Corrige esto en ${DONDE_CONFIGURAR}:\n${detalles}\n`
+  );
+
+  // Inventario de lo obligatorio en producción, sin imprimir ningún valor.
+  // Sirve para distinguir de un vistazo "no la puse" de "la puse mal", que
+  // es donde se pierde más tiempo depurando un despliegue.
+  if (process.env.NODE_ENV === 'production') {
+    const requeridas = ['JWT_SECRET', 'APP_URL', 'API_URL', 'DATABASE_URL'];
+    console.error('Estado de las variables obligatorias en producción:');
+    for (const nombre of requeridas) {
+      const definida = Boolean(process.env[nombre]);
+      console.error(`  ${definida ? '[definida]' : '[AUSENTE ]'}  ${nombre}`);
+    }
+    console.error('');
+  }
+
+  console.error(
+    'Referencia de todas las variables: server/.env.example\n' +
       'Para generar un JWT_SECRET válido: pnpm secret\n'
   );
   process.exit(1);
