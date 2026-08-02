@@ -135,6 +135,9 @@ export const api = {
     ).toString();
     return get(`/api/admin/users${query ? `?${query}` : ''}`);
   },
+  adminCreateUser: (datos) => post('/api/admin/users', datos),
+  // password ausente = el servidor genera una temporal y la devuelve una vez
+  adminSetPassword: (id, password) => post(`/api/admin/users/${id}/password`, password ? { password } : {}),
   adminSetRole: (id, role) => peticion(`/api/admin/users/${id}/role`, { method: 'PATCH', body: { role } }),
   adminDisable: (id) => post(`/api/admin/users/${id}/disable`),
   adminEnable: (id) => post(`/api/admin/users/${id}/enable`),

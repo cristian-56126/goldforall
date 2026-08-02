@@ -182,6 +182,14 @@ oauthRouter.get(
       usuario = porEmail.rows[0];
     }
 
+    if (!usuario && !config.registroPublicoAbierto) {
+      // Con el registro cerrado, Google sirve para ENTRAR con una cuenta que
+      // ya existe, no para crearla. Sin esta comprobación cualquiera con una
+      // cuenta de Google se saltaría el cierre del alta, que es justo la
+      // puerta de atrás que el cierre pretende tapar.
+      return redirigirConError(res, 'registro_cerrado');
+    }
+
     if (!usuario) {
       // 3) Cuenta nueva, sin contraseña (entra solo por Google).
       const rol = config.adminEmails.includes(email) ? 'admin' : 'user';

@@ -73,6 +73,19 @@ const esquema = z
     // Cuentas que se promueven a admin en la migración.
     ADMIN_EMAILS: listaSeparadaPorComas.default(''),
 
+    // Registro público. Cerrado por defecto: las cuentas las crea un admin
+    // desde el panel. Afecta por igual a POST /api/auth/register y al alta
+    // automática por Google, que si no sería la puerta de atrás obvia.
+    ALLOW_PUBLIC_REGISTRATION: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((valor) => valor === 'true'),
+
+    // Solo los lee el script "pnpm seed:admin"; nunca el servidor.
+    SEED_ADMIN_EMAIL: z.string().optional(),
+    SEED_ADMIN_PASSWORD: z.string().optional(),
+    SEED_ADMIN_NAME: z.string().optional(),
+
     // Los proveedores gestionados (Neon, Render, Railway, Supabase) entregan
     // la conexión como una sola URL. Si está presente manda sobre las
     // variables sueltas de abajo, que son las del Postgres local.
@@ -278,6 +291,13 @@ export const config = {
     origen.replace(/\/$/, '')
   ),
   adminEmails: env.ADMIN_EMAILS.map((correo) => correo.toLowerCase()),
+  registroPublicoAbierto: env.ALLOW_PUBLIC_REGISTRATION,
+
+  semillaAdmin: {
+    email: env.SEED_ADMIN_EMAIL?.trim().toLowerCase(),
+    password: env.SEED_ADMIN_PASSWORD,
+    nombre: env.SEED_ADMIN_NAME?.trim(),
+  },
 
   auth: {
     jwtSecret: env.JWT_SECRET,

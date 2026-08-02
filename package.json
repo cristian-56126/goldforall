@@ -15,6 +15,7 @@
     "start": "pnpm --filter goldforall-server start",
     "build": "pnpm --filter goldforall-client build",
     "migrate": "pnpm --filter goldforall-server migrate",
+    "seed:admin": "pnpm --filter goldforall-server seed:admin",
     "secret": "pnpm --filter goldforall-server secret",
     "clean": "pnpm -r exec node -e \"require('fs').rmSync('node_modules',{recursive:true,force:true})\" && node -e \"require('fs').rmSync('node_modules',{recursive:true,force:true})\""
   }

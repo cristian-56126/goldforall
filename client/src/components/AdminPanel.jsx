@@ -11,6 +11,10 @@ export default function AdminPanel() {
   const [busqueda, setBusqueda] = useState('');
   const [error, setError] = useState('');
   const [ocupado, setOcupado] = useState(false);
+  const [nuevo, setNuevo] = useState({ name: '', email: '', role: 'user', password: '' });
+  // Contraseña temporal recién generada. El servidor solo la devuelve una vez
+  // (guarda el hash), así que se muestra hasta que el admin la descarta.
+  const [credencial, setCredencial] = useState(null);
 
   const cargar = useCallback(async (q = '') => {
     setError('');
@@ -49,6 +53,50 @@ export default function AdminPanel() {
     cargar(busqueda);
   };
 
+  const crearUsuario = async (e) => {
+    e.preventDefault();
+    setOcupado(true);
+    setError('');
+    try {
+      const datos = {
+        name: nuevo.name,
+        email: nuevo.email,
+        role: nuevo.role,
+        // Sin contraseña, el servidor genera una temporal y la devuelve.
+        ...(nuevo.password ? { password: nuevo.password } : {}),
+      };
+      const respuesta = await api.adminCreateUser(datos);
+      if (respuesta.password_temporal) {
+        setCredencial({ email: respuesta.user.email, password: respuesta.password_temporal });
+      }
+      setNuevo({ name: '', email: '', role: 'user', password: '' });
+      await cargar(busqueda);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const regenerarContrasena = async (usuario) => {
+    setOcupado(true);
+    setError('');
+    try {
+      const respuesta = await api.adminSetPassword(usuario.id);
+      if (respuesta.password_temporal) {
+        setCredencial({ email: usuario.email, password: respuesta.password_temporal });
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const copiar = (texto) => {
+    navigator.clipboard?.writeText(texto).catch(() => {});
+  };
+
   return (
     <div className="admin">
       <h2 className="seccion-titulo">Administración</h2>
@@ -67,6 +115,83 @@ export default function AdminPanel() {
           <Metrica etiqueta="Conversiones total" valor={stats.conversiones_totales} />
         </div>
       )}
+
+      {credencial && (
+        <div className="credencial">
+          <div>
+            <b>Contraseña temporal de {credencial.email}</b>
+            <p className="hint">
+              No se vuelve a mostrar: la base solo guarda el hash. Entrégasela por un
+              canal seguro y pídele que la cambie al ingresar.
+            </p>
+            <code className="credencial-valor">{credencial.password}</code>
+          </div>
+          <div className="acciones">
+            <button className="btn-mini" onClick={() => copiar(credencial.password)}>
+              Copiar
+            </button>
+            <button className="btn-mini" onClick={() => setCredencial(null)}>
+              Ya la guardé
+            </button>
+          </div>
+        </div>
+      )}
+
+      <form className="card admin-alta" onSubmit={crearUsuario}>
+        <h3>Crear usuario</h3>
+        <p className="hint">
+          El registro público está cerrado: esta es la única vía de alta de cuentas.
+        </p>
+
+        <div className="admin-alta-campos">
+          <label>
+            Nombre
+            <input
+              value={nuevo.name}
+              onChange={(e) => setNuevo({ ...nuevo, name: e.target.value })}
+              required
+              minLength={2}
+              maxLength={120}
+              placeholder="Nombre y apellido"
+            />
+          </label>
+          <label>
+            Correo
+            <input
+              type="email"
+              value={nuevo.email}
+              onChange={(e) => setNuevo({ ...nuevo, email: e.target.value })}
+              required
+              placeholder="persona@empresa.com"
+            />
+          </label>
+          <label>
+            Rol
+            <select
+              value={nuevo.role}
+              onChange={(e) => setNuevo({ ...nuevo, role: e.target.value })}
+            >
+              <option value="user">Usuario</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </label>
+          <label>
+            Contraseña <span className="etiqueta-menor">opcional</span>
+            <input
+              type="text"
+              value={nuevo.password}
+              onChange={(e) => setNuevo({ ...nuevo, password: e.target.value })}
+              minLength={8}
+              placeholder="Vacío = se genera una segura"
+              autoComplete="off"
+            />
+          </label>
+        </div>
+
+        <button className="btn-gold" disabled={ocupado}>
+          {ocupado ? 'Creando…' : 'Crear usuario'}
+        </button>
+      </form>
 
       <form className="admin-buscar" onSubmit={buscar}>
         <input
@@ -137,6 +262,13 @@ export default function AdminPanel() {
                       onClick={() => ejecutar(() => api.adminGrantPremium(usuario.id, 30))}
                     >
                       +30 d Premium
+                    </button>
+                    <button
+                      className="btn-mini"
+                      disabled={ocupado}
+                      onClick={() => regenerarContrasena(usuario)}
+                    >
+                      Nueva contraseña
                     </button>
                     <button
                       className="btn-mini"

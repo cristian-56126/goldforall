@@ -7,12 +7,21 @@ export default function AuthView({ onAuthed, aviso, onCerrarAviso }) {
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
   const [busy, setBusy] = useState(false);
-  const [proveedores, setProveedores] = useState({ google: false });
+  // Se arranca con el registro cerrado y Google apagado: así, mientras carga
+  // la respuesta del servidor, no parpadea una pestaña que quizá no exista.
+  const [proveedores, setProveedores] = useState({ google: false, registration_open: false });
 
   useEffect(() => {
-    // El botón de Google solo se muestra si el servidor lo tiene configurado.
     api.providers().then(setProveedores).catch(() => {});
   }, []);
+
+  const registroAbierto = Boolean(proveedores.registration_open);
+
+  // Si el servidor cierra el registro mientras alguien tenía abierta la
+  // pestaña de alta, se le devuelve a la de ingreso.
+  useEffect(() => {
+    if (!registroAbierto && mode === 'register') setMode('login');
+  }, [registroAbierto, mode]);
 
   const change = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -45,6 +54,13 @@ export default function AuthView({ onAuthed, aviso, onCerrarAviso }) {
     }
   };
 
+  const textoBoton = () => {
+    if (busy) return 'Un momento…';
+    if (mode === 'login') return 'Ingresar';
+    if (mode === 'register') return 'Crear cuenta gratis';
+    return 'Enviar enlace';
+  };
+
   return (
     <div className="auth-wrap">
       <header className="auth-hero">
@@ -62,22 +78,26 @@ export default function AuthView({ onAuthed, aviso, onCerrarAviso }) {
       )}
 
       <form className="card auth-card" onSubmit={submit}>
-        <div className="tabs">
-          <button
-            type="button"
-            className={mode === 'login' ? 'tab active' : 'tab'}
-            onClick={() => cambiarModo('login')}
-          >
-            Ingresar
-          </button>
-          <button
-            type="button"
-            className={mode === 'register' ? 'tab active' : 'tab'}
-            onClick={() => cambiarModo('register')}
-          >
-            Crear cuenta
-          </button>
-        </div>
+        {registroAbierto ? (
+          <div className="tabs">
+            <button
+              type="button"
+              className={mode === 'login' ? 'tab active' : 'tab'}
+              onClick={() => cambiarModo('login')}
+            >
+              Ingresar
+            </button>
+            <button
+              type="button"
+              className={mode === 'register' ? 'tab active' : 'tab'}
+              onClick={() => cambiarModo('register')}
+            >
+              Crear cuenta
+            </button>
+          </div>
+        ) : (
+          <h2 className="auth-titulo">{mode === 'olvide' ? 'Recuperar acceso' : 'Ingresar'}</h2>
+        )}
 
         {mode === 'olvide' && (
           <p className="hint">
@@ -85,7 +105,7 @@ export default function AuthView({ onAuthed, aviso, onCerrarAviso }) {
           </p>
         )}
 
-        {mode === 'register' && (
+        {mode === 'register' && registroAbierto && (
           <label>
             Nombre
             <input
@@ -134,13 +154,7 @@ export default function AuthView({ onAuthed, aviso, onCerrarAviso }) {
         {ok && <p className="exito">{ok}</p>}
 
         <button className="btn-gold" disabled={busy}>
-          {busy
-            ? 'Un momento…'
-            : mode === 'login'
-              ? 'Ingresar'
-              : mode === 'register'
-                ? 'Crear cuenta gratis'
-                : 'Enviar enlace'}
+          {textoBoton()}
         </button>
 
         {proveedores.google && mode !== 'olvide' && (
@@ -172,8 +186,14 @@ export default function AuthView({ onAuthed, aviso, onCerrarAviso }) {
           )}
         </div>
 
-        {mode === 'register' && (
+        {mode === 'register' && registroAbierto && (
           <p className="hint">Plan gratis: 3 consultas al día. Premium: ilimitadas.</p>
+        )}
+
+        {!registroAbierto && mode === 'login' && (
+          <p className="hint">
+            El acceso es por invitación: las cuentas las crea un administrador.
+          </p>
         )}
       </form>
     </div>

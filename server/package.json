@@ -10,6 +10,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "migrate": "node src/migrate.js",
+    "seed:admin": "node src/seed-admin.js",
     "secret": "node -e \"import('node:crypto').then(c=>console.log(c.randomBytes(48).toString('base64url')))\""
   },
   "dependencies": {

@@ -12,6 +12,8 @@ const MOTIVOS_OAUTH = {
   correo_no_verificado: 'Google no confirma que tu correo esté verificado.',
   correo_en_uso: 'Ese correo ya tiene una cuenta creada con contraseña.',
   cuenta_desactivada: 'Tu cuenta está desactivada. Contacta al administrador.',
+  registro_cerrado:
+    'Esa cuenta de Google no tiene acceso. Pide a un administrador que cree tu cuenta.',
   google_deshabilitado: 'El inicio de sesión con Google no está configurado.',
   perfil_incompleto: 'Google no entregó los datos mínimos del perfil.',
   sin_id_token: 'Google no entregó el token de identidad.',

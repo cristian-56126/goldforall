@@ -59,16 +59,31 @@ pnpm dev
 - API: http://localhost:4310
 
 Scripts de la raíz: `pnpm dev`, `pnpm dev:server`, `pnpm dev:client`,
-`pnpm build`, `pnpm migrate`, `pnpm secret`, `pnpm start`.
+`pnpm build`, `pnpm migrate`, `pnpm seed:admin`, `pnpm secret`, `pnpm start`.
 
 El servidor **no arranca** si falta `JWT_SECRET` o es un valor de plantilla:
 es deliberado, evita servir tráfico firmando tokens con un secreto conocido.
 
 ### Crear el primer administrador
 
-1. Pon tu correo en `ADMIN_EMAILS` (en `server/.env`, separados por coma).
-2. Regístrate normalmente en la app con ese correo — entra ya con rol `admin`.
-   Si la cuenta ya existía, corre `pnpm migrate` y se promueve.
+El registro público está **cerrado** (`ALLOW_PUBLIC_REGISTRATION=false`), así
+que la primera cuenta se siembra por línea de comandos. Las credenciales van
+por entorno, nunca en el código:
+
+```bash
+SEED_ADMIN_EMAIL=admin@ejemplo.com \
+SEED_ADMIN_PASSWORD='...' \
+SEED_ADMIN_NAME='Nombre' \
+pnpm seed:admin
+```
+
+Es idempotente: repetirlo no duplica la cuenta, pero sí actualiza la contraseña
+y cierra las sesiones abiertas de ese usuario. La contraseña pasa por la misma
+política que cualquier otra — la cuenta con más privilegios es el peor sitio
+para hacer una excepción.
+
+A partir de ahí, el resto de cuentas se crean desde **Admin → Crear usuario**
+en la propia aplicación.
 
 ## Autenticación
 
@@ -94,6 +109,22 @@ un XSS no puede robarla.
 
 Métodos de acceso: correo + contraseña, Google OAuth (opcional) y recuperación
 de contraseña por enlace de un solo uso.
+
+### Acceso por invitación
+
+`ALLOW_PUBLIC_REGISTRATION=false` (valor por defecto) cierra el alta pública:
+
+- `POST /api/auth/register` responde 403 antes de validar nada, así que
+  tampoco revela por el error de duplicado si un correo existe.
+- El frontend oculta la pestaña «Crear cuenta».
+- **Google tampoco crea cuentas**: sirve para entrar con una que ya exista.
+  Sin esto, cualquiera con una cuenta de Google se saltaría el cierre — es la
+  puerta de atrás evidente de un registro cerrado a medias.
+
+Las cuentas las crea un administrador desde el panel. Puede fijar la contraseña
+o dejar que el servidor genere una temporal de 16 caracteres, que se muestra
+**una sola vez**: la base guarda solo el hash bcrypt, así que no hay forma de
+recuperarla después.
 
 ### Google OAuth (opcional)
 
@@ -125,6 +156,7 @@ las sesiones abiertas.
 
 | Área | Medida |
 |---|---|
+| Superficie de alta | Registro público cerrado; solo un admin crea cuentas. Google no puede crear, solo iniciar sesión |
 | Secretos | `JWT_SECRET` obligatorio (≥32 caracteres), sin valor por defecto; el proceso aborta si falta |
 | CORS | Lista blanca explícita con credenciales; `*` prohibido en producción |
 | CSRF | Double-submit con token firmado (HMAC) + `SameSite=Lax` |
@@ -146,7 +178,7 @@ las sesiones abiertas.
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | /api/auth/providers | Qué métodos de acceso están activos |
-| POST | /api/auth/register | Crear cuenta |
+| POST | /api/auth/register | Crear cuenta — **403 si el registro está cerrado** |
 | POST | /api/auth/login | Iniciar sesión |
 | POST | /api/auth/refresh | Renovar la sesión (rota el refresh token) |
 | POST | /api/auth/logout | Cerrar esta sesión |
@@ -178,6 +210,9 @@ las sesiones abiertas.
 |---|---|---|
 | GET | /api/admin/stats | Métricas generales |
 | GET | /api/admin/users | Listado con búsqueda y paginación |
+| GET | /api/admin/diagnostico | Red, cookies y proxy detectados (calibrar `TRUST_PROXY`) |
+| POST | /api/admin/users | Crear cuenta (contraseña propia o temporal generada) |
+| POST | /api/admin/users/:id/password | Fijar o regenerar contraseña y cerrar sus sesiones |
 | PATCH | /api/admin/users/:id/role | Cambiar rol |
 | POST | /api/admin/users/:id/disable | Desactivar cuenta |
 | POST | /api/admin/users/:id/enable | Reactivar cuenta |

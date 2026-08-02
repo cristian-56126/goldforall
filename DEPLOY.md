@@ -41,6 +41,7 @@ no un detalle de rendimiento.
 - [x] Credenciales de producción en `server/.env.production` (ignorado por git)
 - [x] Repo subido a GitHub (`cristian-56126/goldforall`, privado)
 - [x] Rewrite de `vercel.json` ya apuntando a la URL real de Render
+- [x] Registro público cerrado; cuenta admin `fresa@goldforall.com` sembrada en Neon
 - [ ] Vercel: corregir Root Directory a la raíz y redesplegar
 - [ ] Render: poner `APP_URL` y `API_URL`, y que arranque
 - [ ] Verificar cookies, `TRUST_PROXY` y crear el administrador
@@ -168,8 +169,11 @@ Para cambiar el subdominio, renombrar el proyecto en Settings → General
    | `APP_URL` | **el dominio de Vercel** del paso 3 |
    | `API_URL` | **el mismo dominio de Vercel** — con el rewrite, el navegador ve ahí la API |
    | `CORS_ORIGINS` | déjalo vacío: se deriva de `APP_URL` |
-   | `ADMIN_EMAILS` | tu correo |
+   | `ADMIN_EMAILS` | `fresa@goldforall.com` |
    | `GOOGLE_*`, `SMTP_*` | vacíos si aún no los configuras |
+
+   `ALLOW_PUBLIC_REGISTRATION` ya viene fijada a `false` en `render.yaml`; no
+   hay que escribirla.
 
 3. Deploy. Anota la URL que te asigna, por ejemplo
    `https://goldforall-api.onrender.com`.
@@ -254,10 +258,36 @@ Después, con sesión de admin, abre **`/api/admin/diagnostico`** y comprueba qu
 Comprueba también `red.protocolo_detectado: "https"`; si dice `http`,
 `TRUST_PROXY` está en 0.
 
-### Crear el administrador
+### Cuentas
 
-Regístrate con el correo que pusiste en `ADMIN_EMAILS` y entrarás ya con rol
-`admin`. Si la cuenta ya existía, vuelve a correr las migraciones contra Neon.
+El registro público está **cerrado** (`ALLOW_PUBLIC_REGISTRATION=false`): la
+app es de acceso por invitación. `POST /api/auth/register` responde 403 y
+Google solo sirve para entrar con cuentas que ya existan.
+
+La cuenta de administrador **ya está sembrada** en la base de producción:
+
+| Correo | Rol |
+|---|---|
+| `fresa@goldforall.com` | `admin` |
+
+Es la única cuenta que existe. Entra con ella y **cambia la contraseña** desde
+Cuenta → Cambiar contraseña; la inicial se fijó por línea de comandos y hay que
+tratarla como provisional.
+
+Desde ahí, el resto de usuarios se crean en **Admin → Crear usuario**. Se puede
+escribir la contraseña o dejar que el servidor genere una temporal de 16
+caracteres, que aparece **una sola vez**: la base guarda solo el hash bcrypt.
+
+Para sembrar o resembrar el administrador contra Neon:
+
+```bash
+cd server
+DATABASE_URL='<la de .env.production>' \
+SEED_ADMIN_EMAIL=fresa@goldforall.com \
+SEED_ADMIN_PASSWORD='...' \
+SEED_ADMIN_NAME='Fresa' \
+node src/seed-admin.js
+```
 
 ---
 

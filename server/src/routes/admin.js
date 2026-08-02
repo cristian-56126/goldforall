@@ -6,6 +6,12 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { query, enTransaccion, cerrojoDeUsuario, CERROJO } from '../db.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import {
+  contrasenaEsDerivadaDelUsuario,
+  esquemaContrasena,
+  generarContrasenaTemporal,
+  hashearContrasena,
+} from '../lib/contrasenas.js';
 import { errorConflicto, errorNoEncontrado, errorPeticion } from '../lib/errors.js';
 import { revocarTodasLasSesiones } from '../lib/tokens.js';
 import { requireRole } from '../middleware/auth.js';
@@ -23,6 +29,30 @@ const esquemaListado = z
     limit: z.coerce.number().int().min(1).max(100).default(25),
     offset: z.coerce.number().int().min(0).default(0),
   })
+  .strict();
+
+const esquemaEmail = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3)
+  .max(254)
+  .email('Correo electrónico inválido');
+
+// La contraseña es opcional: si no viene, el servidor genera una temporal y la
+// devuelve UNA sola vez en la respuesta. Nunca se vuelve a poder leer, porque
+// lo que se guarda es el hash bcrypt.
+const esquemaAltaDeUsuario = z
+  .object({
+    name: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres').max(120),
+    email: esquemaEmail,
+    role: z.enum(['user', 'admin']).default('user'),
+    password: esquemaContrasena.optional(),
+  })
+  .strict();
+
+const esquemaCambioDeContrasena = z
+  .object({ password: esquemaContrasena.optional() })
   .strict();
 
 // ---------------------------------------------------------------------------
@@ -123,6 +153,106 @@ adminRouter.get(
     );
 
     res.json({ users: resultado.rows, total: total.rows[0].n, limit, offset });
+  })
+);
+
+/**
+ * Alta de usuario por un administrador. Es la única vía de creación de
+ * cuentas cuando ALLOW_PUBLIC_REGISTRATION está en false.
+ */
+adminRouter.post(
+  '/users',
+  validarBody(esquemaAltaDeUsuario),
+  asyncHandler(async (req, res) => {
+    const { name, email, role } = req.body;
+
+    const generada = !req.body.password;
+    const contrasena = req.body.password ?? generarContrasenaTemporal();
+
+    if (contrasenaEsDerivadaDelUsuario(contrasena, { email, name })) {
+      throw errorPeticion('La contraseña no puede contener el nombre ni el correo del usuario', {
+        codigo: 'contrasena_derivada',
+      });
+    }
+
+    const hash = await hashearContrasena(contrasena);
+
+    let usuario;
+    try {
+      const resultado = await query(
+        `INSERT INTO users (email, password_hash, name, role, email_verified)
+         VALUES ($1, $2, $3, $4, false)
+         RETURNING id, email, name, role, created_at`,
+        [email, hash, name, role]
+      );
+      usuario = resultado.rows[0];
+    } catch (err) {
+      if (err.code === '23505') {
+        throw errorConflicto('Ese correo ya tiene una cuenta', { codigo: 'email_duplicado' });
+      }
+      throw err;
+    }
+
+    res.status(201).json({
+      user: usuario,
+      // Solo se devuelve si la generó el servidor: si la eligió el admin, ya
+      // la conoce y repetirla solo la expone en un log más.
+      password_temporal: generada ? contrasena : undefined,
+      message: generada
+        ? 'Usuario creado. Copia la contraseña temporal: no se vuelve a mostrar.'
+        : 'Usuario creado.',
+    });
+  })
+);
+
+/** Fija o regenera la contraseña de un usuario y lo saca de todas sus sesiones. */
+adminRouter.post(
+  '/users/:id/password',
+  validarParams(esquemaIdUsuario),
+  validarBody(esquemaCambioDeContrasena),
+  asyncHandler(async (req, res) => {
+    const objetivo = Number(req.params.id);
+
+    // Cambiarse la propia contraseña por aquí cerraría la sesión en curso y
+    // además se saltaría la confirmación de la contraseña actual.
+    if (objetivo === req.auth.id) {
+      throw errorPeticion('Para tu propia contraseña usa Cuenta → Cambiar contraseña', {
+        codigo: 'usa_change_password',
+      });
+    }
+
+    const datos = await query('SELECT id, email, name FROM users WHERE id = $1', [objetivo]);
+    const usuario = datos.rows[0];
+    if (!usuario) throw errorNoEncontrado('Usuario no encontrado');
+
+    const generada = !req.body.password;
+    const contrasena = req.body.password ?? generarContrasenaTemporal();
+
+    if (contrasenaEsDerivadaDelUsuario(contrasena, usuario)) {
+      throw errorPeticion('La contraseña no puede contener el nombre ni el correo del usuario', {
+        codigo: 'contrasena_derivada',
+      });
+    }
+
+    const hash = await hashearContrasena(contrasena);
+    await query(
+      `UPDATE users
+          SET password_hash = $2,
+              tokens_valid_from = date_trunc('second', now()),
+              updated_at = now()
+        WHERE id = $1`,
+      [objetivo, hash]
+    );
+    // Una contraseña cambiada por soporte tiene que invalidar lo anterior:
+    // si la cuenta estaba comprometida, dejar sesiones vivas no arregla nada.
+    await revocarTodasLasSesiones(objetivo, 'contrasena_fijada_por_admin');
+
+    res.json({
+      password_temporal: generada ? contrasena : undefined,
+      message: generada
+        ? 'Contraseña regenerada. Cópiala: no se vuelve a mostrar. Se cerraron sus sesiones.'
+        : 'Contraseña actualizada. Se cerraron sus sesiones.',
+    });
   })
 );
 

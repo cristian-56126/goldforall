@@ -160,6 +160,8 @@ authRouter.get('/providers', (_req, res) => {
     google: config.google.habilitado,
     password_reset: true,
     smtp: config.smtp.habilitado,
+    // El frontend oculta "Crear cuenta" cuando esto es false.
+    registration_open: config.registroPublicoAbierto,
   });
 });
 
@@ -167,8 +169,26 @@ authRouter.get('/providers', (_req, res) => {
 // Registro
 // ---------------------------------------------------------------------------
 
+/**
+ * Corta el registro público. Se aplica ANTES de validar y de tocar la base:
+ * con el alta cerrada, este endpoint no debe ni siquiera revelar si un correo
+ * existe por la vía del error de duplicado.
+ */
+function exigirRegistroAbierto(_req, _res, next) {
+  if (!config.registroPublicoAbierto) {
+    return next(
+      errorProhibido(
+        'El registro está cerrado. Pide a un administrador que cree tu cuenta.',
+        { codigo: 'registro_cerrado' }
+      )
+    );
+  }
+  return next();
+}
+
 authRouter.post(
   '/register',
+  exigirRegistroAbierto,
   limitadorRegistro,
   validarBody(esquemaRegistro),
   asyncHandler(async (req, res) => {

@@ -3,6 +3,7 @@
 // Criterio NIST SP 800-63B: longitud mínima razonable y bloqueo de las
 // contraseñas más usadas, en vez de reglas de composición (una mayúscula, un
 // símbolo...) que empujan a la gente a "Password1!" y no aportan entropía real.
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { config } from '../config.js';
@@ -41,6 +42,29 @@ export function contrasenaEsDerivadaDelUsuario(contrasena, { email, name } = {})
   const nombre = String(name || '').trim().toLowerCase();
   if (nombre.length >= 4 && normalizada.includes(nombre)) return true;
   return false;
+}
+
+// Alfabeto sin caracteres que se confunden al dictar o copiar a mano
+// (0/O, 1/l/I). Una contraseña temporal se transcribe, así que la ambigüedad
+// cuesta soporte.
+const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+
+/**
+ * Contraseña temporal para una cuenta creada por un administrador.
+ * 16 caracteres del alfabeto anterior ≈ 92 bits de entropía, elegidos con
+ * rechazo de módulo para que la distribución sea uniforme.
+ */
+export function generarContrasenaTemporal(longitud = 16) {
+  const limite = 256 - (256 % ALFABETO.length);
+  let salida = '';
+  while (salida.length < longitud) {
+    for (const byte of crypto.randomBytes(longitud)) {
+      if (byte >= limite) continue; // descarta el sesgo del módulo
+      salida += ALFABETO[byte % ALFABETO.length];
+      if (salida.length === longitud) break;
+    }
+  }
+  return salida;
 }
 
 export function hashearContrasena(contrasena) {
