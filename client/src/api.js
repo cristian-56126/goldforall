@@ -121,7 +121,8 @@ export const api = {
   // Datos
   me: () => get('/api/me'),
   units: () => get('/api/units'),
-  prices: () => get('/api/prices'),
+  // { refresh: true } salta el cache del servidor (botón de refresco manual)
+  prices: ({ refresh } = {}) => get(refresh ? '/api/prices?refresh=1' : '/api/prices'),
   convert: (datos) => post('/api/convert', datos),
   history: () => get('/api/history'),
   priceHistory: () => get('/api/price-history'),

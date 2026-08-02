@@ -10,7 +10,7 @@ import {
   errorProhibido,
 } from '../lib/errors.js';
 import { requireAuth, requireUsuarioActivo } from '../middleware/auth.js';
-import { limitadorConversion } from '../middleware/security.js';
+import { limitadorConversion, limitadorRefrescoPrecios } from '../middleware/security.js';
 import { validarBody, validarQuery } from '../middleware/validate.js';
 import { getPrices, goldValue } from '../prices.js';
 import { getUserPlanStatus } from '../plan.js';
@@ -34,15 +34,23 @@ apiRouter.get(
 // ---------------------------------------------------------------------------
 // Precio spot del oro + tasas del dólar.
 // No consume cuota: la consulta que cuenta es la conversión.
+// ?refresh=1 salta el cache (botón de actualización manual del frontend);
+// pasa por su propio limitador y aun así respeta el piso de 2 s por fuente.
 // ---------------------------------------------------------------------------
+
+const esquemaPrecios = z
+  .object({ refresh: z.enum(['1', 'true']).optional() })
+  .strict();
 
 apiRouter.get(
   '/prices',
   requireAuth,
-  asyncHandler(async (_req, res) => {
+  validarQuery(esquemaPrecios),
+  (req, res, next) => (req.query.refresh ? limitadorRefrescoPrecios(req, res, next) : next()),
+  asyncHandler(async (req, res) => {
     let precios;
     try {
-      precios = await getPrices();
+      precios = await getPrices({ forzar: Boolean(req.query.refresh) });
     } catch (err) {
       console.error('[precios]', err.message);
       throw errorNoDisponible('No se pudo obtener el precio del oro. Intenta de nuevo.', {
@@ -52,8 +60,11 @@ apiRouter.get(
     res.json({
       gold_usd_oz: precios.goldUsdOz,
       gold_updated_at: precios.goldUpdatedAt,
+      gold_stale: precios.goldStale,
       rates: precios.rates,
       rates_updated_at: precios.ratesUpdatedAt,
+      rates_stale: precios.ratesStale,
+      stale: precios.stale,
       fetched_at: new Date(precios.fetchedAt).toISOString(),
     });
   })

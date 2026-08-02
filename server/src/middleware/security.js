@@ -98,3 +98,11 @@ export const limitadorConversion = crearLimitador({
   maximo: 30,
   mensaje: 'Demasiadas conversiones seguidas. Espera un momento.',
 });
+
+/** Refresco manual de precios: salta el cache, así que va limitado aparte
+ * para que no se convierta en un martillo contra los proveedores externos. */
+export const limitadorRefrescoPrecios = crearLimitador({
+  ventanaMs: 60 * 1000,
+  maximo: 10,
+  mensaje: 'Demasiados refrescos seguidos. Espera un momento.',
+});

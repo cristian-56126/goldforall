@@ -384,6 +384,66 @@ select:focus-visible {
   color: var(--error);
 }
 
+/* Botón de refresco manual: discreto, esquina de la placa */
+.btn-refresh {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--text-dim);
+  cursor: pointer;
+  z-index: 1;
+}
+.btn-refresh:hover {
+  color: var(--gold);
+  border-color: var(--gold-deep);
+}
+.btn-refresh:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.btn-refresh.girando svg {
+  animation: girar 0.9s linear infinite;
+}
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* En la tarjeta de error el botón va en línea, no flotando sobre el texto */
+.ticker-error-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ticker-error-fila .btn-refresh {
+  position: static;
+  flex-shrink: 0;
+}
+/* Proveedor caído: el punto "vivo" deja de latir y avisa en ámbar */
+.live-dot.stale {
+  background: var(--gold);
+  animation: none;
+  box-shadow: none;
+}
+.ticker-stale {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--gold-deep);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--gold);
+  background: rgba(212, 160, 23, 0.07);
+}
+
 /* ---------- Conversor ---------- */
 .converter h2 {
   margin-bottom: 14px;

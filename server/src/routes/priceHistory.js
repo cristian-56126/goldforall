@@ -13,6 +13,13 @@ export const priceHistoryRouter = Router();
 export async function tomarMuestra() {
   try {
     const precios = await getPrices();
+    // Con el proveedor caído, getPrices sirve el último valor conocido
+    // (stale). Grabarlo repetiría el mismo número como si fuera una lectura
+    // nueva y aplanaría la gráfica con datos falsos; mejor un hueco honesto.
+    if (precios.stale) {
+      console.error('[muestreador] proveedor caído; muestra omitida (valor de respaldo)');
+      return;
+    }
     await query(
       `INSERT INTO price_history (gold_usd_oz, usd_cop, usd_gbp, usd_eur)
        VALUES ($1, $2, $3, $4)`,

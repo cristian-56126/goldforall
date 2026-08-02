@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../api.js';
 import PriceTicker from '../components/PriceTicker.jsx';
 import GoldHistory from '../components/GoldHistory.jsx';
@@ -21,22 +21,42 @@ export default function Dashboard({ session, onRefresh, onLogout, aviso, onCerra
 
   const esAdmin = session.user.role === 'admin';
 
-  const loadPrices = useCallback(async () => {
+  const [refrescando, setRefrescando] = useState(false);
+  const sondeoRef = useRef(null);
+
+  const loadPrices = useCallback(async (forzar = false) => {
     try {
-      setPrices(await api.prices());
+      setPrices(await api.prices(forzar ? { refresh: true } : undefined));
       setPricesError('');
     } catch (err) {
       setPricesError(err.message);
     }
   }, []);
 
+  // El sondeo se rearma tras un refresco manual: así el tick automático no
+  // cae un segundo después del clic.
+  const armarSondeo = useCallback(() => {
+    clearInterval(sondeoRef.current);
+    sondeoRef.current = setInterval(() => loadPrices(), 15_000); // cada 15 s
+  }, [loadPrices]);
+
+  const refrescarPrecios = useCallback(async () => {
+    setRefrescando(true);
+    try {
+      await loadPrices(true);
+      armarSondeo();
+    } finally {
+      setRefrescando(false);
+    }
+  }, [loadPrices, armarSondeo]);
+
   useEffect(() => {
     api.units().then((d) => setUnits(d.units)).catch(() => {});
     api.providers().then((p) => setAutoSuscripcion(Boolean(p.self_subscribe))).catch(() => {});
     loadPrices();
-    const t = setInterval(loadPrices, 15_000); // refrescar cada 15 s
-    return () => clearInterval(t);
-  }, [loadPrices]);
+    armarSondeo();
+    return () => clearInterval(sondeoRef.current);
+  }, [loadPrices, armarSondeo]);
 
   const onConverted = () => {
     onRefresh();
@@ -102,7 +122,12 @@ export default function Dashboard({ session, onRefresh, onLogout, aviso, onCerra
       {vista === 'inicio' && (
         <main className="dash-grid">
           <section className="col-main">
-            <PriceTicker prices={prices} error={pricesError} />
+            <PriceTicker
+              prices={prices}
+              error={pricesError}
+              onRefresh={refrescarPrecios}
+              refreshing={refrescando}
+            />
             <Converter
               units={units}
               plan={session.plan}
