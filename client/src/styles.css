@@ -662,7 +662,7 @@ select:focus-visible {
   transition: width 0.3s ease;
 }
 
-/* ---------- Histórico 12 h (gráfica) ---------- */
+/* ---------- Histórico de precio (gráfica) ---------- */
 .gold-history h3 {
   font-family: var(--font-display);
   font-size: 1.05rem;
@@ -686,6 +686,10 @@ select:focus-visible {
 .gh-change.down {
   color: var(--error);
 }
+/* Sin recorrido: ni verde ni rojo, que ninguno de los dos es cierto. */
+.gh-change.flat {
+  color: var(--text-dim);
+}
 .gh-chart {
   width: 100%;
   height: 96px;
@@ -702,6 +706,13 @@ select:focus-visible {
 .gh-area {
   fill: rgba(212, 160, 23, 0.09);
   stroke: none;
+}
+/* Muestra aislada entre dos huecos: sin tramo que dibujar, marca puntual. */
+.gh-tick {
+  stroke: var(--gold);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
 .gh-scale {
   display: flex;

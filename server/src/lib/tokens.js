@@ -205,7 +205,7 @@ export async function rotarRefreshToken(bruto, req) {
   }
 }
 
-/** Poda tokens caducados o revocados hace más de 30 días. */
+/** Poda tokens caducados hace más de 7 días o revocados hace más de 30. */
 export async function limpiarTokensViejos() {
   const resultado = await query(
     `DELETE FROM refresh_tokens

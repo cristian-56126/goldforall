@@ -83,7 +83,7 @@ const migraciones = [
       ALTER TABLE conversion_queries
         ADD COLUMN IF NOT EXISTS percentage NUMERIC(5,2) NOT NULL DEFAULT 100;
 
-      -- Históricos de precio: ventana de últimas 12 horas (se poda al insertar)
+      -- Históricos de precio: ventana de últimas 6 horas (se poda al insertar)
       CREATE TABLE IF NOT EXISTS price_history (
         id SERIAL PRIMARY KEY,
         gold_usd_oz NUMERIC(12,4) NOT NULL,

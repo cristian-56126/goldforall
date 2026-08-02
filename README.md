@@ -201,7 +201,7 @@ las sesiones abiertas.
 | GET | /api/prices | Oro spot + tasas USD. `?refresh=1` salta el cache (limitado a 10/min por IP; piso de 2 s por fuente). Respuesta incluye `stale` si el proveedor está caído y se sirve el último valor conocido |
 | POST | /api/convert | Conversión — consume 1 consulta de la cuota |
 | GET | /api/history | Últimas conversiones (`?limit=`) |
-| GET | /api/price-history | Serie de precios de las últimas 12 h |
+| GET | /api/price-history | Serie de precios de las últimas 6 h |
 | POST | /api/subscribe | Autosuscripción (pago simulado) — **403 salvo `ALLOW_SELF_SUBSCRIBE=true`** |
 
 ### Administración (rol `admin`)

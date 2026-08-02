@@ -191,7 +191,10 @@ El plan free **suspende el servicio tras 15 minutos sin tráfico** y tarda entre
 - La primera visita después de un rato puede agotar el tiempo del rewrite de
   Vercel y fallar.
 - Mientras duerme no corre el muestreador de precios, así que la gráfica de
-  12 horas tendrá huecos.
+  6 horas tendrá huecos. `GET /api/price-history` toma la muestra pendiente al
+  abrir la gráfica, así que la serie se rellena mientras alguien la mira, pero
+  las horas en que nadie entró se quedan vacías: la curva se dibuja partida en
+  tramos en lugar de inventar una recta que cruce el hueco.
 
 Opciones:
 
