@@ -7,7 +7,16 @@ import dotenv from 'dotenv';
 import { z } from 'zod';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(dirname, '..', '.env') });
+const resultadoDotenv = dotenv.config({ path: path.resolve(dirname, '..', '.env') });
+
+// En un PaaS (Render, Railway, Vercel) no existe archivo .env: la
+// configuración llega por variables de entorno del servicio. El mensaje de
+// error tiene que apuntar al sitio correcto o manda a buscar un archivo que
+// no está.
+const hayArchivoEnv = !resultadoDotenv.error;
+const DONDE_CONFIGURAR = hayArchivoEnv
+  ? 'server/.env'
+  : 'las variables de entorno del servicio';
 
 // Valores de plantilla que nunca deben llegar a producción.
 const SECRETOS_PROHIBIDOS = new Set([
@@ -49,8 +58,10 @@ const esquema = z
     PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().max(1440).default(30),
     BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
 
-    // Orígenes permitidos por CORS. En producción es obligatorio declararlos.
-    CORS_ORIGINS: listaSeparadaPorComas.default('http://localhost:5310'),
+    // Orígenes permitidos por CORS. Si no se declara, se deriva de APP_URL:
+    // en el 99% de los despliegues son el mismo valor, y tener que repetirlo
+    // solo añade una variable más que se puede olvidar o escribir mal.
+    CORS_ORIGINS: listaSeparadaPorComas.optional(),
     COOKIE_DOMAIN: z.string().optional(),
     COOKIE_SECURE: z
       .enum(['true', 'false'])
@@ -103,14 +114,28 @@ const esquema = z
   .superRefine((valores, ctx) => {
     if (valores.NODE_ENV !== 'production') return;
 
-    if (!process.env.CORS_ORIGINS) {
+    // APP_URL y API_URL tienen default local para desarrollo. En producción
+    // hay que declararlos: si se quedan en localhost, los enlaces de correo
+    // apuntan a la máquina del usuario y el redirect_uri de Google no valida.
+    if (!process.env.APP_URL) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['CORS_ORIGINS'],
-        message: 'En producción CORS_ORIGINS es obligatorio (no se permite el default local)',
+        path: ['APP_URL'],
+        message:
+          'Obligatorio en producción: dominio público del frontend, por ejemplo ' +
+          'https://goldforall.vercel.app (de aquí sale CORS_ORIGINS si no lo declaras)',
       });
     }
-    if (valores.CORS_ORIGINS.some((origen) => origen === '*')) {
+    if (!process.env.API_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['API_URL'],
+        message:
+          'Obligatorio en producción: dominio público de la API. Con el rewrite ' +
+          'de Vercel es el MISMO dominio que APP_URL',
+      });
+    }
+    if (valores.CORS_ORIGINS?.some((origen) => origen === '*')) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['CORS_ORIGINS'],
@@ -156,8 +181,10 @@ if (!resultado.success) {
     .map((issue) => `  - ${issue.path.join('.') || '(raíz)'}: ${issue.message}`)
     .join('\n');
   console.error(
-    `\nConfiguración inválida en server/.env — el servidor no puede arrancar:\n${detalles}\n\n` +
-      'Revisa server/.env.example. Para generar un JWT_SECRET válido: pnpm secret\n'
+    `\nConfiguración inválida — el servidor no puede arrancar.\n` +
+      `Corrige esto en ${DONDE_CONFIGURAR}:\n${detalles}\n\n` +
+      'Referencia de todas las variables: server/.env.example\n' +
+      'Para generar un JWT_SECRET válido: pnpm secret\n'
   );
   process.exit(1);
 }
@@ -245,7 +272,11 @@ export const config = {
   appUrl: env.APP_URL.replace(/\/$/, ''),
   apiUrl: env.API_URL.replace(/\/$/, ''),
   trustProxy: env.TRUST_PROXY,
-  corsOrigins: env.CORS_ORIGINS,
+  // Sin CORS_ORIGINS declarado (o declarado vacío), el único origen permitido
+  // es el propio frontend.
+  corsOrigins: (env.CORS_ORIGINS?.length ? env.CORS_ORIGINS : [env.APP_URL]).map((origen) =>
+    origen.replace(/\/$/, '')
+  ),
   adminEmails: env.ADMIN_EMAILS.map((correo) => correo.toLowerCase()),
 
   auth: {

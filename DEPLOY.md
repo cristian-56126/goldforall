@@ -39,10 +39,11 @@ no un detalle de rendimiento.
 - [x] Repositorio git inicializado con el primer commit
 - [x] `vercel.json` y `render.yaml` listos
 - [x] Credenciales de producción en `server/.env.production` (ignorado por git)
-- [ ] Subir el repo a GitHub
-- [ ] Desplegar Render
-- [ ] Desplegar Vercel
-- [ ] Enlazar ambos y verificar
+- [x] Repo subido a GitHub (`cristian-56126/goldforall`, privado)
+- [ ] Desplegar Vercel y anotar su dominio
+- [ ] Desplegar Render con ese dominio en `APP_URL` y `API_URL`
+- [ ] Apuntar el rewrite de `vercel.json` a la URL de Render
+- [ ] Verificar cookies, `TRUST_PROXY` y crear el administrador
 
 ---
 
@@ -78,7 +79,36 @@ ejecutarlas no repite nada.
 
 ---
 
-## Paso 3 — API en Render
+## Orden de despliegue (importante)
+
+Hay una dependencia circular aparente: la API necesita saber el dominio del
+frontend (`APP_URL`) para arrancar, y el frontend necesita saber el dominio de
+la API para el rewrite. Se rompe así:
+
+1. **Vercel primero.** La SPA compila y se publica sin que la API exista; solo
+   las llamadas a `/api/*` fallan mientras tanto. De ahí sale el dominio.
+2. **Render después**, ya con el dominio de Vercel en `APP_URL` y `API_URL`.
+3. **Volver a Vercel**: apuntar el rewrite a la URL de Render y hacer push.
+
+Al revés no funciona: el servidor aborta el arranque si `APP_URL` no está
+declarada en producción. Es a propósito — si se quedara en el valor local, los
+enlaces de recuperación de contraseña apuntarían a `localhost` y el
+`redirect_uri` de Google no validaría.
+
+---
+
+## Paso 3 — SPA en Vercel
+
+1. Vercel → **Add New Project** → importa el repo.
+   `vercel.json` ya trae install, build y directorio de salida; no toques nada.
+2. Deploy. Anota la URL, por ejemplo `https://goldforall.vercel.app`.
+
+La app cargará y mostrará la pantalla de ingreso; los errores de red en
+`/api/*` son esperados hasta terminar el paso 5.
+
+---
+
+## Paso 4 — API en Render
 
 1. Render → **New** → **Blueprint** → selecciona el repo. Detecta `render.yaml`.
 2. Render pedirá los valores marcados `sync: false`. Cópialos de
@@ -88,16 +118,19 @@ ejecutarlas no repite nada.
    |---|---|
    | `DATABASE_URL` | la cadena de Neon |
    | `JWT_SECRET` | el generado en `.env.production` (distinto al de desarrollo) |
+   | `APP_URL` | **el dominio de Vercel** del paso 3 |
+   | `API_URL` | **el mismo dominio de Vercel** — con el rewrite, el navegador ve ahí la API |
+   | `CORS_ORIGINS` | déjalo vacío: se deriva de `APP_URL` |
    | `ADMIN_EMAILS` | tu correo |
-   | `APP_URL` / `API_URL` / `CORS_ORIGINS` | déjalos en blanco por ahora — se llenan en el paso 5 |
    | `GOOGLE_*`, `SMTP_*` | vacíos si aún no los configuras |
 
 3. Deploy. Anota la URL que te asigna, por ejemplo
    `https://goldforall-api.onrender.com`.
 
-El servicio **no arrancará** si `JWT_SECRET` falta o mide menos de 32
-caracteres: es deliberado. Si el log muestra `Configuración inválida`, la causa
-está en ese mensaje.
+El servicio **no arranca** si falta `JWT_SECRET`, `APP_URL`, `API_URL` o
+`DATABASE_URL`: es deliberado, evita servir tráfico mal configurado. Si el log
+muestra `Configuración inválida`, el mensaje dice exactamente qué variable
+falta y dónde corregirla.
 
 ### Advertencia del plan gratuito de Render
 
@@ -122,38 +155,21 @@ Opciones:
 
 ---
 
-## Paso 4 — SPA en Vercel
+## Paso 5 — Conectar el rewrite
 
-1. Edita `vercel.json` y pon la URL real de Render en el primer rewrite:
+Edita `vercel.json` y pon la URL real de Render en el primer rewrite:
 
-   ```json
-   { "source": "/api/:path*", "destination": "https://TU-API.onrender.com/api/:path*" }
-   ```
-
-   ```bash
-   git commit -am "chore: apuntar el rewrite de Vercel a la API de Render"
-   git push
-   ```
-
-2. Vercel → **Add New Project** → importa el repo.
-   `vercel.json` ya trae install, build y directorio de salida; no toques nada.
-3. Deploy. Anota la URL, por ejemplo `https://goldforall.vercel.app`.
-
----
-
-## Paso 5 — Enlazar los dos
-
-En Render, rellena ahora las tres URLs con el dominio de **Vercel** (no el de
-Render: con el rewrite, el navegador ve la API en el dominio de Vercel, y de
-ahí sale también el `redirect_uri` de Google):
-
-```
-APP_URL=https://goldforall.vercel.app
-API_URL=https://goldforall.vercel.app
-CORS_ORIGINS=https://goldforall.vercel.app
+```json
+{ "source": "/api/:path*", "destination": "https://TU-API.onrender.com/api/:path*" }
 ```
 
-Guarda y deja que Render redespliegue.
+```bash
+git commit -am "chore: apuntar el rewrite de Vercel a la API de Render"
+git push
+```
+
+Vercel redespliega solo con el push. A partir de aquí `/api/*` responde desde
+el mismo origen que la SPA.
 
 ---
 

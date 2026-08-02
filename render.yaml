@@ -35,14 +35,17 @@ services:
       - key: JWT_SECRET
         sync: false
 
-      # --- URLs públicas ---
+      # --- URLs públicas: OBLIGATORIAS, el servicio no arranca sin ellas ---
       # Con el rewrite de Vercel, el navegador ve la API en el MISMO dominio
-      # que la SPA, así que APP_URL y API_URL son los dos el dominio de Vercel.
-      # De ahí sale también el redirect_uri de Google.
+      # que la SPA, así que las dos llevan el dominio de Vercel (no el de
+      # Render). De ahí sale también el redirect_uri de Google.
+      # Por eso hay que desplegar Vercel ANTES que esto: ver DEPLOY.md.
       - key: APP_URL
         sync: false
       - key: API_URL
         sync: false
+      # Opcional: si se omite, se permite exactamente el origen de APP_URL.
+      # Solo hace falta declararlo si hay más de un dominio de frontend.
       - key: CORS_ORIGINS
         sync: false
 
