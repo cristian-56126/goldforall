@@ -40,10 +40,23 @@ no un detalle de rendimiento.
 - [x] `vercel.json` y `render.yaml` listos
 - [x] Credenciales de producción en `server/.env.production` (ignorado por git)
 - [x] Repo subido a GitHub (`cristian-56126/goldforall`, privado)
-- [ ] Desplegar Vercel y anotar su dominio
-- [ ] Desplegar Render con ese dominio en `APP_URL` y `API_URL`
-- [ ] Apuntar el rewrite de `vercel.json` a la URL de Render
+- [x] Rewrite de `vercel.json` ya apuntando a la URL real de Render
+- [ ] Vercel: corregir Root Directory a la raíz y redesplegar
+- [ ] Render: poner `APP_URL` y `API_URL`, y que arranque
 - [ ] Verificar cookies, `TRUST_PROXY` y crear el administrador
+
+### Dominios de este proyecto
+
+| Pieza | Dominio |
+|---|---|
+| Frontend (Vercel, producción) | `https://goldforall-client.vercel.app` |
+| API (Render) | `https://goldforall-api.onrender.com` |
+| Base de datos | Neon `goldforall` / `super-sky-04909011` |
+
+`APP_URL` y `API_URL` llevan **las dos** el dominio de Vercel: con el rewrite,
+el navegador ve la API ahí. El dominio de Render solo aparece en el
+`destination` del rewrite de `vercel.json`, nunca en la configuración del
+servidor.
 
 ---
 
@@ -100,11 +113,45 @@ enlaces de recuperación de contraseña apuntarían a `localhost` y el
 ## Paso 3 — SPA en Vercel
 
 1. Vercel → **Add New Project** → importa el repo.
-   `vercel.json` ya trae install, build y directorio de salida; no toques nada.
-2. Deploy. Anota la URL, por ejemplo `https://goldforall.vercel.app`.
+
+2. **Root Directory: déjalo en la raíz del repositorio.**
+
+   Al ser un monorepo, Vercel ofrece importar el workspace `client` y suele
+   preseleccionarlo. **No lo aceptes.** Con el Root Directory en `client`,
+   Vercel lee `client/vercel.json` — que no existe — e ignora el de la raíz,
+   donde están los rewrites de `/api/*`. Síntomas:
+
+   - el build falla con `No output directory named "dist" found`
+     (busca `dist` en lugar de `client/dist`);
+   - y si llegara a pasar, la API no respondería, porque sin el rewrite
+     `/api/*` no va a ninguna parte.
+
+   Si ya se importó mal: Settings → Build & Deployment → Root Directory →
+   dejarlo vacío → Save → Redeploy.
+
+3. Deploy.
 
 La app cargará y mostrará la pantalla de ingreso; los errores de red en
 `/api/*` son esperados hasta terminar el paso 5.
+
+### Qué URL usar como APP_URL
+
+Vercel genera tres tipos de dominio y solo uno sirve:
+
+| Dominio | Uso |
+|---|---|
+| `proyecto-<hash>-<cuenta>.vercel.app` | ese despliegue concreto; cambia en cada build |
+| `proyecto-git-main-<cuenta>.vercel.app` | alias de la rama |
+| **`proyecto.vercel.app`** | **dominio de producción — este es el bueno** |
+
+Está en **Settings → Domains**: es el que no lleva hash ni nombre de rama.
+
+> Con **Deployment Protection** en `Standard Protection` (el valor por
+> defecto), los dos primeros quedan detrás de un muro de login de Vercel. Si
+> uno de ellos se usa como `APP_URL`, toda la API queda inaccesible.
+
+Para cambiar el subdominio, renombrar el proyecto en Settings → General
+**antes** de fijar `APP_URL` en Render: el nombre del proyecto es el dominio.
 
 ---
 
