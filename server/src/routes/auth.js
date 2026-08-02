@@ -162,6 +162,8 @@ authRouter.get('/providers', (_req, res) => {
     smtp: config.smtp.habilitado,
     // El frontend oculta "Crear cuenta" cuando esto es false.
     registration_open: config.registroPublicoAbierto,
+    // Y los botones "Mejorar a Premium" cuando esto es false.
+    self_subscribe: config.autoSuscripcionAbierta,
   });
 });
 

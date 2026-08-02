@@ -78,6 +78,11 @@ services:
       - key: ALLOW_PUBLIC_REGISTRATION
         value: "false"
 
+      # Autosuscripción Premium (pago simulado) cerrada: Premium lo gestiona
+      # el administrador con duración o fecha de caducidad.
+      - key: ALLOW_SELF_SUBSCRIBE
+        value: "false"
+
       # --- Opcionales: dejar vacíos desactiva la funcionalidad ---
       # Google OAuth. El URI de redirección autorizado debe ser
       # https://TU-DOMINIO-VERCEL/api/auth/google/callback

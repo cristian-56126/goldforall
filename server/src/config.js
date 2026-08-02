@@ -89,6 +89,15 @@ const esquema = z
       .default('false')
       .transform((valor) => valor === 'true'),
 
+    // Autosuscripción a Premium (POST /api/subscribe, pago SIMULADO).
+    // Cerrada por defecto: mientras no exista pasarela real, dejarla abierta
+    // significa que cualquier usuario se activa Premium gratis y la gestión
+    // de Premium por el administrador deja de tener sentido.
+    ALLOW_SELF_SUBSCRIBE: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((valor) => valor === 'true'),
+
     // Solo los lee el script "pnpm seed:admin"; nunca el servidor.
     SEED_ADMIN_EMAIL: z.string().optional(),
     SEED_ADMIN_PASSWORD: z.string().optional(),
@@ -316,6 +325,7 @@ export const config = {
   ),
   adminEmails: env.ADMIN_EMAILS.map((correo) => correo.toLowerCase()),
   registroPublicoAbierto: env.ALLOW_PUBLIC_REGISTRATION,
+  autoSuscripcionAbierta: env.ALLOW_SELF_SUBSCRIBE,
 
   semillaAdmin: {
     email: env.SEED_ADMIN_EMAIL?.trim().toLowerCase(),

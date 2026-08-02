@@ -15,6 +15,40 @@ export default function AdminPanel() {
   // Contraseña temporal recién generada. El servidor solo la devuelve una vez
   // (guarda el hash), así que se muestra hasta que el admin la descarta.
   const [credencial, setCredencial] = useState(null);
+  // Editor de Premium abierto para un usuario concreto (id) y su fecha.
+  const [premiumEdit, setPremiumEdit] = useState(null);
+  const [premiumHasta, setPremiumHasta] = useState('');
+
+  const hoy = new Date().toISOString().slice(0, 10);
+  const enUnMes = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+
+  const abrirPremium = (usuario) => {
+    setPremiumEdit(usuario.id);
+    // Si ya tiene Premium, se parte de su vencimiento actual; si no, de +30 días.
+    setPremiumHasta(
+      usuario.premium_hasta ? String(usuario.premium_hasta).slice(0, 10) : enUnMes
+    );
+  };
+
+  // "En línea" = sesión viva cuya última renovación es reciente. El refresh
+  // token rota cada ~15 min mientras la app está abierta, así que 20 min de
+  // margen distingue "app abierta ahora" de "dejó sesión iniciada".
+  const estadoDeConexion = (usuario) => {
+    if (!usuario.sesiones_activas) return { clase: 'off', texto: 'Sin sesión' };
+    const ultima = usuario.ultima_conexion ? new Date(usuario.ultima_conexion).getTime() : 0;
+    if (Date.now() - ultima < 20 * 60_000) return { clase: 'on', texto: 'En línea' };
+    return { clase: 'idle', texto: 'Sesión abierta' };
+  };
+
+  const formatearFecha = (valor) => {
+    if (!valor) return '—';
+    return new Date(valor).toLocaleString('es-CO', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
 
   const cargar = useCallback(async (q = '') => {
     setError('');
@@ -111,6 +145,7 @@ export default function AdminPanel() {
           <Metrica etiqueta="Desactivados" valor={stats.desactivados} />
           <Metrica etiqueta="Con Google" valor={stats.con_google} />
           <Metrica etiqueta="Sesiones" valor={stats.sesiones_activas} />
+          <Metrica etiqueta="En línea ahora" valor={stats.en_linea} />
           <Metrica etiqueta="Conversiones 24 h" valor={stats.conversiones_24h} />
           <Metrica etiqueta="Conversiones total" valor={stats.conversiones_totales} />
         </div>
@@ -211,19 +246,26 @@ export default function AdminPanel() {
             <tr>
               <th>Usuario</th>
               <th>Rol</th>
-              <th>Acceso</th>
-              <th>Premium</th>
+              <th>Actividad</th>
               <th>Consultas</th>
+              <th>Premium</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {usuarios.map((usuario) => (
+            {usuarios.map((usuario) => {
+              const conexion = estadoDeConexion(usuario);
+              return (
               <tr key={usuario.id} className={usuario.disabled_at ? 'fila-inactiva' : undefined}>
                 <td>
                   <div className="celda-usuario">
                     <b>{usuario.name}</b>
                     <span>{usuario.email}</span>
+                    <span>
+                      {usuario.tiene_password ? 'contraseña' : ''}
+                      {usuario.tiene_password && usuario.usa_google ? ' + ' : ''}
+                      {usuario.usa_google ? 'Google' : ''}
+                    </span>
                     {usuario.disabled_at && <span className="etiqueta roja">desactivado</span>}
                   </div>
                 </td>
@@ -233,18 +275,39 @@ export default function AdminPanel() {
                   </span>
                 </td>
                 <td className="celda-menor">
-                  {usuario.tiene_password ? 'contraseña' : ''}
-                  {usuario.tiene_password && usuario.usa_google ? ' + ' : ''}
-                  {usuario.usa_google ? 'Google' : ''}
+                  <span className={`estado-conexion ${conexion.clase}`}>{conexion.texto}</span>
+                  <span className="celda-linea">Última: {formatearFecha(usuario.ultima_conexion)}</span>
+                  {usuario.sesiones_activas > 1 && (
+                    <span className="celda-linea">{usuario.sesiones_activas} sesiones</span>
+                  )}
                 </td>
                 <td className="celda-menor">
-                  {usuario.premium_hasta
-                    ? new Date(usuario.premium_hasta).toLocaleDateString('es-CO')
-                    : '—'}
+                  <span className="celda-linea">Hoy: <b>{usuario.consultas_hoy}</b></span>
+                  <span className="celda-linea">Total: {usuario.conversiones}</span>
                 </td>
-                <td>{usuario.conversiones}</td>
+                <td className="celda-menor">
+                  {usuario.premium_hasta ? (
+                    <>
+                      <span className="etiqueta dorada">premium</span>
+                      <span className="celda-linea">
+                        hasta {new Date(usuario.premium_hasta).toLocaleDateString('es-CO')}
+                      </span>
+                    </>
+                  ) : (
+                    'gratis (3/día)'
+                  )}
+                </td>
                 <td>
                   <div className="acciones">
+                    <button
+                      className="btn-mini"
+                      disabled={ocupado}
+                      onClick={() =>
+                        premiumEdit === usuario.id ? setPremiumEdit(null) : abrirPremium(usuario)
+                      }
+                    >
+                      Premium…
+                    </button>
                     <button
                       className="btn-mini"
                       disabled={ocupado}
@@ -255,13 +318,6 @@ export default function AdminPanel() {
                       }
                     >
                       {usuario.role === 'admin' ? 'Quitar admin' : 'Hacer admin'}
-                    </button>
-                    <button
-                      className="btn-mini"
-                      disabled={ocupado}
-                      onClick={() => ejecutar(() => api.adminGrantPremium(usuario.id, 30))}
-                    >
-                      +30 d Premium
                     </button>
                     <button
                       className="btn-mini"
@@ -291,9 +347,67 @@ export default function AdminPanel() {
                       {usuario.disabled_at ? 'Reactivar' : 'Desactivar'}
                     </button>
                   </div>
+
+                  {premiumEdit === usuario.id && (
+                    <div className="premium-editor">
+                      <label>
+                        Premium hasta (incluido)
+                        <input
+                          type="date"
+                          min={hoy}
+                          value={premiumHasta}
+                          onChange={(e) => setPremiumHasta(e.target.value)}
+                        />
+                      </label>
+                      <div className="acciones">
+                        <button
+                          className="btn-mini"
+                          disabled={ocupado || !premiumHasta}
+                          onClick={() =>
+                            ejecutar(async () => {
+                              await api.adminGrantPremium(usuario.id, { hasta: premiumHasta });
+                              setPremiumEdit(null);
+                            })
+                          }
+                        >
+                          Aplicar fecha
+                        </button>
+                        <button
+                          className="btn-mini"
+                          disabled={ocupado}
+                          onClick={() =>
+                            ejecutar(async () => {
+                              await api.adminGrantPremium(usuario.id, { dias: 30 });
+                              setPremiumEdit(null);
+                            })
+                          }
+                        >
+                          +30 días
+                        </button>
+                        {usuario.premium_hasta && (
+                          <button
+                            className="btn-mini peligro"
+                            disabled={ocupado}
+                            onClick={() =>
+                              ejecutar(async () => {
+                                await api.adminRevokePremium(usuario.id);
+                                setPremiumEdit(null);
+                              })
+                            }
+                          >
+                            Quitar Premium
+                          </button>
+                        )}
+                        <button className="btn-mini" onClick={() => setPremiumEdit(null)}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

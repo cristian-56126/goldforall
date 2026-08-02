@@ -55,6 +55,30 @@ const esquemaCambioDeContrasena = z
   .object({ password: esquemaContrasena.optional() })
   .strict();
 
+// Otorgar Premium: por duración (dias) o hasta una fecha concreta (hasta,
+// AAAA-MM-DD). "hasta" es inclusiva: caduca al terminar ese día en la zona
+// horaria del negocio, porque "caduca el 2 de septiembre" significa que el
+// día 2 todavía funciona.
+const esquemaPremium = z
+  .object({
+    dias: z.coerce.number().int().min(1).max(3650).optional(),
+    hasta: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener formato AAAA-MM-DD')
+      .optional(),
+  })
+  .strict()
+  .refine((datos) => !(datos.dias !== undefined && datos.hasta !== undefined), {
+    message: 'Envía "dias" o "hasta", no ambos',
+  });
+
+/** Fecha de hoy (AAAA-MM-DD) en la zona horaria de la cuota. */
+function hoyEnZona() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: config.cuota.zonaHoraria }).format(
+    new Date()
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 /**
@@ -114,7 +138,10 @@ adminRouter.get(
         (SELECT count(*)::int FROM conversion_queries
           WHERE created_at > now() - interval '24 hours')                    AS conversiones_24h,
         (SELECT count(*)::int FROM refresh_tokens
-          WHERE revoked_at IS NULL AND expires_at > now())                   AS sesiones_activas
+          WHERE revoked_at IS NULL AND expires_at > now())                   AS sesiones_activas,
+        (SELECT count(DISTINCT user_id)::int FROM refresh_tokens
+          WHERE revoked_at IS NULL AND expires_at > now()
+            AND issued_at > now() - interval '20 minutes')                   AS en_linea
     `);
     res.json({ stats: resultado.rows[0] });
   })
@@ -128,11 +155,21 @@ adminRouter.get(
     // El texto de búsqueda va como parámetro, nunca concatenado al SQL.
     const patron = q ? `%${q}%` : null;
 
+    // Actividad por usuario:
+    //  - sesiones_activas: refresh tokens vivos (sesión abierta en algún lado).
+    //  - ultima_conexion: emisión más reciente de un refresh token. Como el
+    //    token rota cada ~15 min mientras la app está abierta, esto aproxima
+    //    "última vez activo" con esa granularidad, sin registrar cada request.
+    //  - consultas_hoy: conversiones del día en la zona horaria del negocio
+    //    (misma ventana que usa la cuota del plan gratis).
     const resultado = await query(
       `SELECT u.id, u.email, u.name, u.role, u.email_verified, u.created_at,
               u.disabled_at, (u.google_id IS NOT NULL) AS usa_google,
               (u.password_hash IS NOT NULL) AS tiene_password,
               s.expires_at AS premium_hasta,
+              t.sesiones_activas,
+              t.ultima_conexion,
+              hoy.consultas_hoy,
               (SELECT count(*)::int FROM conversion_queries c WHERE c.user_id = u.id) AS conversiones
          FROM users u
          LEFT JOIN LATERAL (
@@ -140,10 +177,22 @@ adminRouter.get(
             WHERE user_id = u.id AND status = 'active' AND expires_at > now()
             ORDER BY expires_at DESC LIMIT 1
          ) s ON true
+         LEFT JOIN LATERAL (
+           SELECT count(*) FILTER (WHERE rt.revoked_at IS NULL AND rt.expires_at > now())::int
+                    AS sesiones_activas,
+                  max(rt.issued_at) AS ultima_conexion
+             FROM refresh_tokens rt WHERE rt.user_id = u.id
+         ) t ON true
+         LEFT JOIN LATERAL (
+           SELECT count(*)::int AS consultas_hoy
+             FROM conversion_queries c
+            WHERE c.user_id = u.id
+              AND c.created_at >= (date_trunc('day', now() AT TIME ZONE $4) AT TIME ZONE $4)
+         ) hoy ON true
         WHERE $1::text IS NULL OR u.email ILIKE $1 OR u.name ILIKE $1
         ORDER BY u.created_at DESC
         LIMIT $2 OFFSET $3`,
-      [patron, limit, offset]
+      [patron, limit, offset, config.cuota.zonaHoraria]
     );
 
     const total = await query(
@@ -346,14 +395,29 @@ adminRouter.post(
   })
 );
 
-/** Alta manual de Premium (cortesía, soporte, pago fuera de la pasarela). */
+/**
+ * Alta manual de Premium (cortesía, soporte, pago fuera de la pasarela).
+ * Dos modos:
+ *   { dias: 30 }            extiende desde el vencimiento vigente (o desde hoy)
+ *   { hasta: '2026-09-02' } fija la caducidad exacta, inclusive, en la zona
+ *                           del negocio — pisa la fecha anterior si la había
+ * Sin cuerpo: 30 días.
+ */
 adminRouter.post(
   '/users/:id/subscription',
   validarParams(esquemaIdUsuario),
-  validarBody(z.object({ dias: z.coerce.number().int().min(1).max(3650).default(30) }).strict()),
+  validarBody(esquemaPremium),
   asyncHandler(async (req, res) => {
     const objetivo = Number(req.params.id);
-    const { dias } = req.body;
+    const { hasta } = req.body;
+    const dias = req.body.dias ?? (hasta ? undefined : 30);
+    const zona = config.cuota.zonaHoraria;
+
+    if (hasta && hasta < hoyEnZona()) {
+      throw errorPeticion('La fecha de caducidad no puede estar en el pasado', {
+        codigo: 'fecha_pasada',
+      });
+    }
 
     const suscripcion = await enTransaccion(async (cliente) => {
       await cerrojoDeUsuario(cliente, CERROJO.SUSCRIPCION, objetivo);
@@ -368,8 +432,8 @@ adminRouter.post(
         });
       }
 
-      // Si ya tiene Premium vigente, se extiende desde su vencimiento en lugar
-      // de crear una segunda suscripción solapada.
+      // Una sola suscripción vigente por usuario: si existe se actualiza, no
+      // se apila una segunda fila solapada.
       const vigente = await cliente.query(
         `SELECT id, expires_at FROM user_subscriptions
           WHERE user_id = $1 AND status = 'active' AND expires_at > now()
@@ -377,24 +441,42 @@ adminRouter.post(
         [objetivo]
       );
 
+      // Caducidad inclusiva con "hasta": medianoche del día SIGUIENTE en la
+      // zona del negocio — "hasta el 2" = el día 2 completo sigue siendo
+      // Premium. Con fecha explícita se FIJA (el admin define la caducidad,
+      // aunque acorte); con días se extiende desde el vencimiento vigente.
       if (vigente.rows[0]) {
-        const extendida = await cliente.query(
-          `UPDATE user_subscriptions
-              SET expires_at = expires_at + ($2 || ' days')::interval
-            WHERE id = $1
-            RETURNING id, expires_at`,
-          [vigente.rows[0].id, String(dias)]
-        );
-        return extendida.rows[0];
+        const actualizada = hasta
+          ? await cliente.query(
+              `UPDATE user_subscriptions
+                  SET expires_at = ((($2)::date + 1)::timestamp AT TIME ZONE $3)
+                WHERE id = $1 RETURNING id, expires_at`,
+              [vigente.rows[0].id, hasta, zona]
+            )
+          : await cliente.query(
+              `UPDATE user_subscriptions
+                  SET expires_at = expires_at + ($2 || ' days')::interval
+                WHERE id = $1 RETURNING id, expires_at`,
+              [vigente.rows[0].id, String(dias)]
+            );
+        return actualizada.rows[0];
       }
 
-      const creada = await cliente.query(
-        `INSERT INTO user_subscriptions
-           (user_id, plan_id, expires_at, payment_provider, is_simulated, granted_by)
-         VALUES ($1, $2, now() + ($3 || ' days')::interval, 'admin', true, $4)
-         RETURNING id, expires_at`,
-        [objetivo, plan.rows[0].id, String(dias), req.auth.id]
-      );
+      const creada = hasta
+        ? await cliente.query(
+            `INSERT INTO user_subscriptions
+               (user_id, plan_id, expires_at, payment_provider, is_simulated, granted_by)
+             VALUES ($1, $2, ((($3)::date + 1)::timestamp AT TIME ZONE $4), 'admin', true, $5)
+             RETURNING id, expires_at`,
+            [objetivo, plan.rows[0].id, hasta, zona, req.auth.id]
+          )
+        : await cliente.query(
+            `INSERT INTO user_subscriptions
+               (user_id, plan_id, expires_at, payment_provider, is_simulated, granted_by)
+             VALUES ($1, $2, now() + ($3 || ' days')::interval, 'admin', true, $4)
+             RETURNING id, expires_at`,
+            [objetivo, plan.rows[0].id, String(dias), req.auth.id]
+          );
       return creada.rows[0];
     });
 
@@ -402,5 +484,24 @@ adminRouter.post(
       message: `Premium activo hasta ${new Date(suscripcion.expires_at).toISOString()}`,
       subscription: suscripcion,
     });
+  })
+);
+
+/** Quita el Premium vigente: el usuario vuelve al plan gratis de inmediato. */
+adminRouter.delete(
+  '/users/:id/subscription',
+  validarParams(esquemaIdUsuario),
+  asyncHandler(async (req, res) => {
+    const resultado = await query(
+      `UPDATE user_subscriptions
+          SET status = 'cancelled'
+        WHERE user_id = $1 AND status = 'active' AND expires_at > now()
+        RETURNING id`,
+      [Number(req.params.id)]
+    );
+    if (resultado.rowCount === 0) {
+      throw errorPeticion('Ese usuario no tiene Premium vigente', { codigo: 'sin_premium' });
+    }
+    res.json({ message: 'Premium retirado. El usuario vuelve al plan gratis.' });
   })
 );

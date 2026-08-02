@@ -4,9 +4,26 @@ import { fmtMoney, fmtNum, CURRENCY_LABELS, CURRENCY_FLAGS } from '../format.js'
 
 const TROY_OZ_GRAMS = 31.1035;
 
+// Cantidad con formato es-CO mientras se escribe: puntos de miles y coma
+// decimal ("12.500,5"). Un input type="number" no puede mostrar separadores,
+// por eso el campo es de texto y el número se deriva al parsear.
+function formatearCantidad(texto) {
+  const limpio = texto.replace(/[^\d,]/g, '');
+  const [entera, ...resto] = limpio.split(',');
+  const enteraFmt = entera.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  // Solo se conserva la primera coma; el resto de comas se ignoran.
+  return resto.length > 0 ? `${enteraFmt},${resto.join('').slice(0, 4)}` : enteraFmt;
+}
+
+function parsearCantidad(texto) {
+  const numero = Number(texto.replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(numero) ? numero : 0;
+}
+
 export default function Converter({ units, plan, onConverted, onSubscribe }) {
   const [unitCode, setUnitCode] = useState('castellano');
-  const [quantity, setQuantity] = useState('1');
+  const [qtyText, setQtyText] = useState('1');
+  const quantity = parsearCantidad(qtyText);
   const [pct, setPct] = useState(100);
   const [pctText, setPctText] = useState('100');
 
@@ -35,12 +52,12 @@ export default function Converter({ units, plan, onConverted, onSubscribe }) {
   // "Consultar valor" trae precio fresco del servidor y si consume.
   let display = null;
   if (result && selected) {
-    const gramsTotal = Number(quantity || 0) * Number(selected.grams);
+    const gramsTotal = quantity * Number(selected.grams);
     const intlUsd = gramsTotal * (result.gold_usd_oz / TROY_OZ_GRAMS);
     const usd = intlUsd * (pct / 100);
     display = {
       unitName: selected.name_es,
-      quantity: Number(quantity || 0),
+      quantity,
       grams_total: gramsTotal,
       pct,
       intl_usd: intlUsd,
@@ -57,11 +74,15 @@ export default function Converter({ units, plan, onConverted, onSubscribe }) {
     e.preventDefault();
     setError('');
     setLimitHit(false);
+    if (quantity <= 0) {
+      setError('Escribe una cantidad mayor que 0');
+      return;
+    }
     setBusy(true);
     try {
       const data = await api.convert({
         unit_code: unitCode,
-        quantity: Number(quantity),
+        quantity,
         percentage: pct,
       });
       data.consulted_at = new Date().toISOString();
@@ -86,13 +107,13 @@ export default function Converter({ units, plan, onConverted, onSubscribe }) {
           <label className="conv-qty">
             Cantidad
             <input
-              type="number"
+              type="text"
               inputMode="decimal"
-              min="0.0001"
-              step="any"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
+              value={qtyText}
+              onChange={(e) => setQtyText(formatearCantidad(e.target.value))}
+              placeholder="0"
               required
+              aria-label="Cantidad de oro en la unidad elegida"
             />
           </label>
 
@@ -119,7 +140,7 @@ export default function Converter({ units, plan, onConverted, onSubscribe }) {
 
         {selected && (
           <p className="conv-grams">
-            = {fmtNum(Number(quantity || 0) * Number(selected.grams), 4)} gramos de oro
+            = {fmtNum(quantity * Number(selected.grams), 4)} gramos de oro
           </p>
         )}
 
@@ -172,9 +193,15 @@ export default function Converter({ units, plan, onConverted, onSubscribe }) {
       {limitHit && (
         <div className="limit-box">
           <p>Alcanzaste el límite de {plan.daily_limit} consultas de hoy.</p>
-          <button className="btn-gold" onClick={onSubscribe}>
-            Pasar a Premium — consultas ilimitadas
-          </button>
+          {onSubscribe ? (
+            <button className="btn-gold" onClick={onSubscribe}>
+              Pasar a Premium — consultas ilimitadas
+            </button>
+          ) : (
+            <p className="hint">
+              Para consultas ilimitadas, pide al administrador que active tu plan Premium.
+            </p>
+          )}
         </div>
       )}
 

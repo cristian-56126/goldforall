@@ -1160,3 +1160,60 @@ select:focus-visible {
   user-select: all;
   overflow-wrap: anywhere;
 }
+
+/* ---------- Actividad por usuario (admin) ---------- */
+.estado-conexion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+.estado-conexion::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+.estado-conexion.on::before {
+  background: var(--emerald);
+  box-shadow: 0 0 6px var(--emerald);
+}
+.estado-conexion.on { color: var(--emerald); }
+.estado-conexion.idle::before { background: var(--gold); }
+.celda-linea {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ---------- Editor de Premium por usuario ---------- */
+.premium-editor {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--gold-deep);
+  border-radius: var(--radius);
+  background: var(--ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.premium-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+.premium-editor input[type='date'] {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--ink-0);
+  color: var(--text);
+  font-family: var(--font-body);
+  color-scheme: dark;
+}

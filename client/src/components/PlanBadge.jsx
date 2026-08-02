@@ -25,10 +25,18 @@ export default function PlanBadge({ plan, onSubscribe }) {
               style={{ width: `${Math.min(100, (plan.used_today / plan.daily_limit) * 100)}%` }}
             />
           </div>
-          <button className="btn-gold small" onClick={onSubscribe}>
-            Mejorar a Premium
-          </button>
-          <p className="plan-line small">Suscripción mensual · consultas ilimitadas</p>
+          {onSubscribe ? (
+            <>
+              <button className="btn-gold small" onClick={onSubscribe}>
+                Mejorar a Premium
+              </button>
+              <p className="plan-line small">Suscripción mensual · consultas ilimitadas</p>
+            </>
+          ) : (
+            <p className="plan-line small">
+              Premium (consultas ilimitadas) lo activa un administrador.
+            </p>
+          )}
         </>
       )}
     </div>

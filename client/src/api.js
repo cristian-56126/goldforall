@@ -142,7 +142,10 @@ export const api = {
   adminDisable: (id) => post(`/api/admin/users/${id}/disable`),
   adminEnable: (id) => post(`/api/admin/users/${id}/enable`),
   adminRevokeSessions: (id) => post(`/api/admin/users/${id}/revoke-sessions`),
-  adminGrantPremium: (id, dias) => post(`/api/admin/users/${id}/subscription`, { dias }),
+  // datos: { dias: 30 } para extender, o { hasta: 'AAAA-MM-DD' } para fijar
+  // la caducidad exacta (inclusiva, zona horaria del negocio)
+  adminGrantPremium: (id, datos = {}) => post(`/api/admin/users/${id}/subscription`, datos),
+  adminRevokePremium: (id) => peticion(`/api/admin/users/${id}/subscription`, { method: 'DELETE' }),
 };
 
 export const URL_LOGIN_GOOGLE = '/api/auth/google';

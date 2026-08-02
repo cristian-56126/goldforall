@@ -15,6 +15,9 @@ export default function Dashboard({ session, onRefresh, onLogout, aviso, onCerra
   const [historyKey, setHistoryKey] = useState(0);
   const [vista, setVista] = useState('inicio'); // 'inicio' | 'cuenta' | 'admin'
   const [errorAccion, setErrorAccion] = useState('');
+  // Con la autosuscripción cerrada (pago simulado, Premium lo activa el
+  // admin), los botones "Mejorar a Premium" se ocultan.
+  const [autoSuscripcion, setAutoSuscripcion] = useState(false);
 
   const esAdmin = session.user.role === 'admin';
 
@@ -29,6 +32,7 @@ export default function Dashboard({ session, onRefresh, onLogout, aviso, onCerra
 
   useEffect(() => {
     api.units().then((d) => setUnits(d.units)).catch(() => {});
+    api.providers().then((p) => setAutoSuscripcion(Boolean(p.self_subscribe))).catch(() => {});
     loadPrices();
     const t = setInterval(loadPrices, 15_000); // refrescar cada 15 s
     return () => clearInterval(t);
@@ -103,13 +107,13 @@ export default function Dashboard({ session, onRefresh, onLogout, aviso, onCerra
               units={units}
               plan={session.plan}
               onConverted={onConverted}
-              onSubscribe={subscribe}
+              onSubscribe={autoSuscripcion ? subscribe : null}
             />
             <GoldHistory />
           </section>
 
           <aside className="col-side">
-            <PlanBadge plan={session.plan} onSubscribe={subscribe} />
+            <PlanBadge plan={session.plan} onSubscribe={autoSuscripcion ? subscribe : null} />
             <History refreshKey={historyKey} />
           </aside>
         </main>

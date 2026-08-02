@@ -1,8 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { config } from '../config.js';
 import { CERROJO, cerrojoDeUsuario, enTransaccion, query } from '../db.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
-import { errorDemasiadasPeticiones, errorNoDisponible, errorPeticion } from '../lib/errors.js';
+import {
+  errorDemasiadasPeticiones,
+  errorNoDisponible,
+  errorPeticion,
+  errorProhibido,
+} from '../lib/errors.js';
 import { requireAuth, requireUsuarioActivo } from '../middleware/auth.js';
 import { limitadorConversion } from '../middleware/security.js';
 import { validarBody, validarQuery } from '../middleware/validate.js';
@@ -259,6 +265,15 @@ apiRouter.post(
   '/subscribe',
   requireUsuarioActivo,
   asyncHandler(async (req, res) => {
+    // Mientras el pago sea simulado y Premium lo gestione el administrador,
+    // la autosuscripción queda cerrada: si no, cualquier usuario se activa
+    // Premium gratis y la fecha de caducidad que fija el admin no vale nada.
+    if (!config.autoSuscripcionAbierta) {
+      throw errorProhibido('El plan Premium lo activa un administrador.', {
+        codigo: 'suscripcion_cerrada',
+      });
+    }
+
     const userId = req.auth.id;
 
     const resultado = await enTransaccion(async (cliente) => {

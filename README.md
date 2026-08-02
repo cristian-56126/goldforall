@@ -202,7 +202,7 @@ las sesiones abiertas.
 | POST | /api/convert | Conversión — consume 1 consulta de la cuota |
 | GET | /api/history | Últimas conversiones (`?limit=`) |
 | GET | /api/price-history | Serie de precios de las últimas 12 h |
-| POST | /api/subscribe | Activa Premium 30 días (pago simulado) |
+| POST | /api/subscribe | Autosuscripción (pago simulado) — **403 salvo `ALLOW_SELF_SUBSCRIBE=true`** |
 
 ### Administración (rol `admin`)
 
@@ -217,7 +217,13 @@ las sesiones abiertas.
 | POST | /api/admin/users/:id/disable | Desactivar cuenta |
 | POST | /api/admin/users/:id/enable | Reactivar cuenta |
 | POST | /api/admin/users/:id/revoke-sessions | Cerrar sus sesiones |
-| POST | /api/admin/users/:id/subscription | Otorgar/extender Premium |
+| POST | /api/admin/users/:id/subscription | Premium: `{dias}` extiende, `{hasta:"AAAA-MM-DD"}` fija caducidad inclusiva |
+| DELETE | /api/admin/users/:id/subscription | Quitar el Premium vigente |
+
+El listado de usuarios incluye actividad: sesiones activas, última conexión
+(aproximada por la rotación del refresh token, ~15 min de granularidad),
+consultas del día y acumuladas. Premium lo gestiona el administrador mientras
+el pago sea simulado (`ALLOW_SELF_SUBSCRIBE=false`).
 
 Toda petición que modifique datos usando cookies debe llevar la cabecera
 `X-CSRF-Token` con el valor de la cookie `gfa_csrf`. Los clientes que no son
