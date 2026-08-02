@@ -1,0 +1,21 @@
+{
+  "name": "goldforall",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aplicación web de compra y venta de oro con precio internacional en tiempo real",
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./client\" --filter \"./server\" dev",
+    "dev:client": "pnpm --filter goldforall-client dev",
+    "dev:server": "pnpm --filter goldforall-server dev",
+    "start": "pnpm --filter goldforall-server start",
+    "build": "pnpm --filter goldforall-client build",
+    "migrate": "pnpm --filter goldforall-server migrate",
+    "secret": "pnpm --filter goldforall-server secret",
+    "clean": "pnpm -r exec node -e \"require('fs').rmSync('node_modules',{recursive:true,force:true})\" && node -e \"require('fs').rmSync('node_modules',{recursive:true,force:true})\""
+  }
+}

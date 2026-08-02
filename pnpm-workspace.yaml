@@ -1,0 +1,8 @@
+packages:
+  - client
+  - server
+
+# Solo estos paquetes pueden ejecutar scripts de instalación.
+# esbuild lo necesita Vite para descargar su binario nativo.
+onlyBuiltDependencies:
+  - esbuild

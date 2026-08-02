@@ -1,0 +1,30 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Secretos — NUNCA commitear
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Build
+dist/
+build/
+client/dist/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Lockfiles de otros gestores (este repo usa pnpm)
+package-lock.json
+yarn.lock
+
+# Editor / SO
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,91 @@
+# Infraestructura del backend en Render (Blueprint).
+# Crear con: Render Dashboard -> New -> Blueprint -> apuntar a este repo.
+#
+# La base de datos NO está aquí: vive en Neon. Se conecta con DATABASE_URL,
+# que se carga a mano en el dashboard por ser un secreto (sync: false).
+services:
+  - type: web
+    name: goldforall-api
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    rootDir: .
+
+    # Render detecta pnpm por el pnpm-lock.yaml y el campo packageManager
+    # del package.json de la raíz.
+    buildCommand: pnpm install --frozen-lockfile
+    startCommand: pnpm --filter goldforall-server start
+
+    # Si /api/health deja de responder 200, Render reinicia el servicio.
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+
+      - key: NODE_ENV
+        value: production
+
+      # --- Secretos: se cargan a mano en el dashboard de Render ---
+      # DATABASE_URL: la cadena de conexión de Neon (incluye sslmode=require)
+      - key: DATABASE_URL
+        sync: false
+      # JWT_SECRET: generar con "pnpm secret". DEBE ser distinto al de desarrollo.
+      - key: JWT_SECRET
+        sync: false
+
+      # --- URLs públicas ---
+      # Con el rewrite de Vercel, el navegador ve la API en el MISMO dominio
+      # que la SPA, así que APP_URL y API_URL son los dos el dominio de Vercel.
+      # De ahí sale también el redirect_uri de Google.
+      - key: APP_URL
+        sync: false
+      - key: API_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Dos saltos de proxy: Vercel (rewrite) y el balanceador de Render.
+      # Verificar tras desplegar con GET /api/admin/diagnostico: si "ip"
+      # no es tu IP real, ajustar este número.
+      - key: TRUST_PROXY
+        value: "2"
+
+      - key: COOKIE_SECURE
+        value: "true"
+
+      - key: QUOTA_TIMEZONE
+        value: America/Bogota
+
+      - key: ACCESS_TOKEN_TTL
+        value: 15m
+      - key: REFRESH_TOKEN_TTL_DAYS
+        value: "30"
+      - key: BCRYPT_ROUNDS
+        value: "12"
+
+      # Correos que quedan como admin al correr las migraciones.
+      - key: ADMIN_EMAILS
+        sync: false
+
+      # --- Opcionales: dejar vacíos desactiva la funcionalidad ---
+      # Google OAuth. El URI de redirección autorizado debe ser
+      # https://TU-DOMINIO-VERCEL/api/auth/google/callback
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+
+      # SMTP. Sin SMTP_HOST el enlace de recuperación solo se imprime en el
+      # log de Render, que no le sirve a un usuario real.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
