@@ -49,11 +49,14 @@ services:
       - key: CORS_ORIGINS
         sync: false
 
-      # Dos saltos de proxy: Vercel (rewrite) y el balanceador de Render.
-      # Verificar tras desplegar con GET /api/admin/diagnostico: si "ip"
-      # no es tu IP real, ajustar este número.
+      # Saltos de proxy medidos EN PRODUCCIÓN con GET /api/admin/diagnostico:
+      #   cliente -> Vercel (rewrite) -> Cloudflare de Render -> LB interno
+      # X-Forwarded-For trae 4 entradas; con 4 la IP detectada es la real.
+      # Nota asumida: quien pegue directo a *.onrender.com (sin pasar por
+      # Vercel) puede falsear su IP en el rate limit; el bloqueo de cuenta
+      # por correo cubre la fuerza bruta también en ese camino.
       - key: TRUST_PROXY
-        value: "2"
+        value: "4"
 
       - key: COOKIE_SECURE
         value: "true"
